@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from app.api.deps import get_db
+from sqlalchemy import text
 from app.api.routers import data, backtests, ml
 
 
@@ -21,7 +22,7 @@ def health_check(db: Session = Depends(get_db)):
     Verifica o status do serviço e a conexão com o banco de dados.
     """
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db_status = "ok"
     except Exception as e:
         db_status = f"error: {e}"

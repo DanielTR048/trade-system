@@ -5,6 +5,7 @@ from app.models.market_data import Price
 from app.models.backtest import Backtest, Metric, BacktestStatus, Trade
 from app.strategies.sma_cross import SMACross
 from app.strategies.factory import get_strategy
+from app.strategies.analyzers import TradeListAnalyzer
 
 def run_backtest(db: Session, backtest_params: dict):
     # Extrai os parâmetros do dicionário
@@ -14,6 +15,7 @@ def run_backtest(db: Session, backtest_params: dict):
     initial_cash = backtest_params['initial_cash']
 
     cerebro = bt.Cerebro()
+    cerebro.addanalyzer(TradeListAnalyzer, _name='trade_list_analyzer')
     strategy_name = backtest_params['strategy_type']
 
     try:
@@ -82,51 +84,73 @@ def run_backtest(db: Session, backtest_params: dict):
         "total_net_pnl": pnl_net_total,
     }
     
-    new_backtest = Backtest(
-        ticker=ticker,
-        start_date=start_date_str,
-        end_date=end_date_str,
-        initial_cash=initial_cash,
-        strategy_type=backtest_params['strategy_type'],
-        strategy_params_json=backtest_params.get('strategy_params'),
-        status=BacktestStatus.COMPLETED
-    )
-    db.add(new_backtest)
-    db.commit()
-    db.refresh(new_backtest)
-
-    if 'trades' in trade_analysis and trade_analysis.trades:
-        for t in trade_analysis.trades:
-            new_trade = Trade(
-                backtest_id=new_backtest.id,
-                size=t.size,
-                price_entry=t.price,
-                date_entry=t.open_datetime.date(),
-                price_exit=t.close_price,
-                date_exit=t.close_datetime.date(),
-                pnl=t.pnl,
-                pnl_comm=t.pnlcomm
-            )
-            db.add(new_trade)
+    # --- BLOCO DE DEPURAÇÃO E SALVAMENTO (VERSÃO FINAL) ---
+    try:
+        # 1. Crie e salve o objeto Backtest
+        new_backtest = Backtest(
+            ticker=ticker,
+            start_date=start_date_str,
+            end_date=end_date_str,
+            initial_cash=initial_cash,
+            strategy_type=backtest_params['strategy_type'],
+            strategy_params_json=backtest_params.get('strategy_params'),
+            status=BacktestStatus.COMPLETED
+        )
+        db.add(new_backtest)
         db.commit()
-    
+        db.refresh(new_backtest)
+        
+        # 2. Crie e salve o objeto de Métricas
+        new_metrics = Metric(
+            backtest_id=new_backtest.id,
+            total_return_percentage=metrics['total_return_percentage'],
+            sharpe_ratio=metrics['sharpe_ratio'],
+            max_drawdown_percentage=metrics['max_drawdown_percentage'],
+            win_rate_percentage=metrics['win_rate_percentage'],
+            total_net_pnl=metrics['total_net_pnl'],
+            total_closed_trades=metrics['total_closed_trades']
+        )
+        db.add(new_metrics)
+        db.commit()
 
-    new_metrics = Metric(
-        backtest_id=new_backtest.id,
-        total_return_percentage=metrics['total_return_percentage'],
-        sharpe_ratio=metrics['sharpe_ratio'],
-        max_drawdown_percentage=metrics['max_drawdown_percentage'],
-        win_rate_percentage=metrics['win_rate_percentage'],
-        total_net_pnl=metrics['total_net_pnl'],
-        total_closed_trades=metrics['total_closed_trades']
-    )
-    db.add(new_metrics)
-    db.commit()
-
-    return {
-        "backtest_id": new_backtest.id,
-        "ticker": new_backtest.ticker,
-        "initial_portfolio_value": initial_portfolio_value,
-        "final_portfolio_value": final_portfolio_value,
-        "metrics": metrics
-    }
+        # --- Checkpoints de Depuração dos Trades ---
+        print("\n--- INICIANDO DEPURAÇÃO TRADES ---")
+        
+        trade_list = strat.analyzers.trade_list_analyzer.get_analysis()
+        
+        print("\n--- INICIANDO SALVAMENTO DOS TRADES ---")
+        print(f"Número de trades capturados pelo analyzer: {len(trade_list)}")
+        
+        if trade_list:
+            print("CHECKPOINT 3: Entrando no bloco para salvar os trades...")
+            for i, t in enumerate(trade_list):
+                new_trade = Trade(
+                    backtest_id=new_backtest.id,
+                    size=t['size'],
+                    price_entry=t['price_entry'],
+                    date_entry=t['date_entry'].date(),
+                    price_exit=t['price_exit'],         
+                    date_exit=t['date_exit'].date(),   
+                    pnl=t['pnl'],
+                    pnl_comm=t['pnl_comm']
+                )
+                db.add(new_trade)
+            
+            print(f"CHECKPOINT 4: {len(trade_list)} trades foram adicionados à sessão. Comitando no banco...")
+            db.commit()
+            print("CHECKPOINT 5: Commit dos trades realizado com sucesso.")
+        else:
+            print("CHECKPOINT 3: A lista de trades estava vazia. Bloco de salvamento foi pulado.")
+        
+        print("--- FIM DA DEPURAÇÃO DOS TRADES ---\n")
+        
+        return {
+            "backtest_id": new_backtest.id,
+            "ticker": new_backtest.ticker,
+            "initial_portfolio_value": initial_portfolio_value,
+            "final_portfolio_value": final_portfolio_value,
+            "metrics": metrics
+        }
+    except Exception as e:
+        db.rollback()
+        raise e

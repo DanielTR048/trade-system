@@ -24,6 +24,9 @@ class Backtest(Base):
     commission = Column(Float, default=0.0)
     status = Column(SQLAlchemyEnum(BacktestStatus), default=BacktestStatus.PENDING, nullable=False)
 
+    metric_relation = relationship("Metric", back_populates="backtest_relation", uselist=False, cascade="all, delete-orphan")
+    trades_relation = relationship("Trade", back_populates="backtest_relation", cascade="all, delete-orphan")
+
 class Trade(Base):
     __tablename__ = "trades"
     
@@ -38,6 +41,8 @@ class Trade(Base):
     pnl = Column(Float) # Profit and Loss (Lucro e Prejuízo)
     pnl_comm = Column(Float) # PnL incluindo comissões
 
+    backtest_relation = relationship("Backtest", back_populates="trades_relation")
+
 class Metric(Base):
     __tablename__ = "metrics"
     
@@ -50,3 +55,4 @@ class Metric(Base):
     win_rate_percentage = Column(Float)
     total_net_pnl = Column(Float)
     total_closed_trades = Column(Integer)
+    backtest_relation = relationship("Backtest", back_populates="metric_relation")

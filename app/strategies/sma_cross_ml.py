@@ -1,5 +1,3 @@
-# app/strategies/sma_cross_ml.py
-
 import backtrader as bt
 import joblib
 import os
