@@ -1,7 +1,7 @@
 # Dockerfile CORRETO E FINAL
 
 # Use uma imagem base oficial do Python
-FROM python:3.11-slim
+FROM python:3.12
 
 # Instala dependências essenciais do sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \

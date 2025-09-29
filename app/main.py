@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from app.api.deps import get_db
-from app.api.routers import data, backtests 
+from app.api.routers import data, backtests, ml
 
 
 app = FastAPI(
@@ -13,6 +13,7 @@ app = FastAPI(
 # Incluir o roteador na aplicação
 app.include_router(data.router, prefix="/data", tags=["Market Data"]) 
 app.include_router(backtests.router, prefix="/backtests", tags=["Backtests"])
+app.include_router(ml.router, prefix="/ml", tags=["Machine Learning"])
 
 @app.get("/health", tags=["Health Check"])
 def health_check(db: Session = Depends(get_db)):
